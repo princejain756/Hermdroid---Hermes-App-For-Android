@@ -99,6 +99,8 @@ fun ChatRoute(api: DesktopHermesApi, onDisconnect: () -> Unit) {
             trustedMode = enabled
             preferences.edit().putBoolean("trusted_mode", enabled).apply()
         },
+        onAccessibilitySettings = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+        onHomeSettings = { context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) },
         onDisconnect = onDisconnect,
     )
 }
@@ -119,6 +121,8 @@ private fun ChatScreen(
     onCancelAndroid: () -> Unit,
     trustedMode: Boolean,
     onTrustedMode: (Boolean) -> Unit,
+    onAccessibilitySettings: () -> Unit,
+    onHomeSettings: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
     var showModels by remember { mutableStateOf(false) }
@@ -126,7 +130,7 @@ private fun ChatScreen(
         val tablet = maxWidth >= 760.dp
         if (tablet) {
             Row(Modifier.fillMaxSize().systemBarsPadding()) {
-                SessionPane(state, onSession, onNewSession, onDisconnect, trustedMode, onTrustedMode, Modifier.width(310.dp).fillMaxHeight())
+                SessionPane(state, onSession, onNewSession, onDisconnect, trustedMode, onTrustedMode, onAccessibilitySettings, onHomeSettings, Modifier.width(310.dp).fillMaxHeight())
                 VerticalDivider()
                 Conversation(state, onDraft, onSend, onInterrupt, { showModels = true }, null, Modifier.weight(1f))
             }
@@ -144,6 +148,8 @@ private fun ChatScreen(
                             onDisconnect,
                             trustedMode,
                             onTrustedMode,
+                            onAccessibilitySettings,
+                            onHomeSettings,
                             Modifier.fillMaxSize(),
                         )
                     }
@@ -251,6 +257,8 @@ private fun SessionPane(
     onDisconnect: () -> Unit,
     trustedMode: Boolean,
     onTrustedMode: (Boolean) -> Unit,
+    onAccessibilitySettings: () -> Unit,
+    onHomeSettings: () -> Unit,
     modifier: Modifier,
 ) {
     Column(modifier.background(MaterialTheme.colorScheme.surface).padding(18.dp)) {
@@ -278,6 +286,8 @@ private fun SessionPane(
             }
             Switch(checked = trustedMode, onCheckedChange = onTrustedMode)
         }
+        TextButton(onClick = onAccessibilitySettings) { Text("Enable device control") }
+        TextButton(onClick = onHomeSettings) { Text("Set Hermroid as Home app") }
         TextButton(onClick = onDisconnect) { Icon(Icons.Rounded.Close, null); Spacer(Modifier.width(8.dp)); Text("Disconnect server") }
     }
 }
