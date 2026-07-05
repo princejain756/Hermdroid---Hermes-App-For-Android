@@ -127,8 +127,10 @@ Adding or probing a server must never mutate the active server's headers, cookie
 - collapsible reasoning and tool groups;
 - approval and clarification overlays;
 - steer, queue, cancel, regenerate, edit, copy, share, branch, and truncate actions;
-- model, provider, reasoning effort, profile, project, and workspace controls;
-- model recents and favorites;
+- an always-visible model switcher inside the chat composer, matching the compact Hermes Desktop and Hermex interaction pattern;
+- a searchable model picker grouped by provider, with availability state, recent models, favorites, and the active model clearly marked;
+- model changes apply to the next turn, persist with the session when supported by the server, and never interrupt an in-flight response;
+- compact reasoning-effort, profile, project, and workspace controls beside or directly below the model switcher;
 - slash-command discovery and completion;
 - context-window usage display;
 - Markdown, task lists, links, tables, syntax-highlighted code, math, images, audio, and attachment cards;
