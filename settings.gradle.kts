@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Hermroid"
-include(":app", ":core:model", ":core:network", ":core:security", ":core:design", ":feature:onboarding", ":feature:chat")
+include(":app", ":core:model", ":core:network", ":core:security", ":core:design", ":core:automation", ":feature:onboarding", ":feature:chat")

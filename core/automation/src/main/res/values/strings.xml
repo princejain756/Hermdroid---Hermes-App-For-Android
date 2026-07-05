@@ -1,0 +1,3 @@
+<resources>
+    <string name="accessibility_service_description">Lets Hermroid perform actions you approve, such as tapping labelled controls, entering text, and navigating Android.</string>
+</resources>
