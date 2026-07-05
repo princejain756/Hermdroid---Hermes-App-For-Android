@@ -45,6 +45,8 @@ fun ChatRoute(api: DesktopHermesApi, onDisconnect: () -> Unit) {
         onSession = vm::openSession,
         onNewSession = vm::newSession,
         onModel = vm::selectModel,
+        onApproval = vm::answerApproval,
+        onClarification = vm::answerClarification,
         onDisconnect = onDisconnect,
     )
 }
@@ -59,6 +61,8 @@ private fun ChatScreen(
     onSession: (String) -> Unit,
     onNewSession: () -> Unit,
     onModel: (String) -> Unit,
+    onApproval: (String) -> Unit,
+    onClarification: (String) -> Unit,
     onDisconnect: () -> Unit,
 ) {
     var showModels by remember { mutableStateOf(false) }
@@ -102,6 +106,60 @@ private fun ChatScreen(
     if (showModels) {
         ModelPickerSheet(state.models, state.selectedModelId, onModel) { showModels = false }
     }
+    state.approval?.let { ApprovalDialog(it, onApproval) }
+    state.clarification?.let { ClarificationDialog(it, onClarification) }
+}
+
+@Composable
+private fun ApprovalDialog(request: ApprovalRequest, onChoice: (String) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onChoice("deny") },
+        icon = { Icon(Icons.Rounded.Stop, contentDescription = null) },
+        title = { Text("Approval required") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(request.description)
+                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Text(request.command, Modifier.fillMaxWidth().padding(12.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                }
+                Text("Review the complete command before allowing it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                Button(onClick = { onChoice("once") }) { Text("Allow once") }
+                Row {
+                    TextButton(onClick = { onChoice("session") }) { Text("This session") }
+                    if (request.allowPermanent) TextButton(onClick = { onChoice("always") }) { Text("Always") }
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = { onChoice("deny") }) { Text("Deny") } },
+    )
+}
+
+@Composable
+private fun ClarificationDialog(request: ClarificationRequest, onAnswer: (String) -> Unit) {
+    var answer by remember(request.requestId) { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Hermes has a question") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(request.question)
+                request.choices.forEach { choice ->
+                    OutlinedButton(onClick = { onAnswer(choice) }, modifier = Modifier.fillMaxWidth()) { Text(choice) }
+                }
+                OutlinedTextField(
+                    value = answer,
+                    onValueChange = { answer = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Type another answer") },
+                )
+            }
+        },
+        confirmButton = { Button(onClick = { onAnswer(answer.trim()) }, enabled = answer.isNotBlank()) { Text("Answer") } },
+    )
 }
 
 @Composable

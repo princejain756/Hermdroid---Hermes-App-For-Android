@@ -89,6 +89,14 @@ class DesktopHermesApi(private val rpc: JsonRpcTransport) {
         rpc.request("session.interrupt", mapOf("session_id" to sessionId))
             .objectValue()["ok"] as? Boolean ?: false
 
+    suspend fun respondToApproval(sessionId: String, choice: String): Boolean =
+        rpc.request("approval.respond", mapOf("choice" to choice, "session_id" to sessionId))
+            .objectValue()["ok"] as? Boolean ?: false
+
+    suspend fun respondToClarification(requestId: String, answer: String): Boolean =
+        rpc.request("clarify.respond", mapOf("answer" to answer, "request_id" to requestId))
+            .objectValue()["ok"] as? Boolean ?: false
+
     fun disconnect() = rpc.disconnect()
 }
 

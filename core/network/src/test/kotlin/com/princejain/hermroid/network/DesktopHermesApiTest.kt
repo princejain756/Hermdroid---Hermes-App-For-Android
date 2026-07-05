@@ -93,6 +93,25 @@ class DesktopHermesApiTest {
             rpc.calls,
         )
     }
+
+    @Test
+    fun `approval and clarification responses use official RPC methods`() = runBlocking {
+        val rpc = FakeRpc(
+            "approval.respond" to mapOf("ok" to true),
+            "clarify.respond" to mapOf("ok" to true),
+        )
+        val api = DesktopHermesApi(rpc)
+
+        assertTrue(api.respondToApproval("sid-1", "once"))
+        assertTrue(api.respondToClarification("request-1", "Android"))
+        assertEquals(
+            listOf(
+                Call("approval.respond", mapOf("choice" to "once", "session_id" to "sid-1")),
+                Call("clarify.respond", mapOf("answer" to "Android", "request_id" to "request-1")),
+            ),
+            rpc.calls,
+        )
+    }
 }
 
 private data class Call(val method: String, val params: Map<String, Any?>)

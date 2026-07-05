@@ -8,6 +8,18 @@ import com.princejain.hermroid.model.HermesSession
 import com.princejain.hermroid.model.ToolActivity
 import com.princejain.hermroid.model.forDisplay
 
+data class ApprovalRequest(
+    val command: String,
+    val description: String,
+    val allowPermanent: Boolean,
+)
+
+data class ClarificationRequest(
+    val requestId: String,
+    val question: String,
+    val choices: List<String>,
+)
+
 data class ChatUiState(
     val sessions: List<HermesSession> = emptyList(),
     val currentSessionId: String? = null,
@@ -20,6 +32,8 @@ data class ChatUiState(
     val loading: Boolean = true,
     val busy: Boolean = false,
     val error: String? = null,
+    val approval: ApprovalRequest? = null,
+    val clarification: ClarificationRequest? = null,
 )
 
 sealed interface ChatAction {
@@ -34,6 +48,9 @@ sealed interface ChatAction {
     data class SendStarted(val messageId: String) : ChatAction
     data class StreamUpdated(val stream: ChatStreamState) : ChatAction
     data class ModelSelected(val modelId: String) : ChatAction
+    data class ApprovalRequested(val request: ApprovalRequest) : ChatAction
+    data class ClarificationRequested(val request: ClarificationRequest) : ChatAction
+    data object RequestAnswered : ChatAction
     data object Interrupted : ChatAction
     data class Failed(val message: String) : ChatAction
 }
@@ -73,6 +90,9 @@ fun reduceChatState(state: ChatUiState, action: ChatAction): ChatUiState = when 
         error = action.stream.error,
     )
     is ChatAction.ModelSelected -> state.copy(selectedModelId = action.modelId, error = null)
+    is ChatAction.ApprovalRequested -> state.copy(approval = action.request)
+    is ChatAction.ClarificationRequested -> state.copy(clarification = action.request)
+    ChatAction.RequestAnswered -> state.copy(approval = null, clarification = null)
     ChatAction.Interrupted -> state.copy(busy = false)
     is ChatAction.Failed -> state.copy(loading = false, busy = false, error = action.message)
 }

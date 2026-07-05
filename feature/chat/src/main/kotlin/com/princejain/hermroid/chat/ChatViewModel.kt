@@ -19,8 +19,30 @@ class ChatViewModel(private val api: DesktopHermesApi) : ViewModel() {
         viewModelScope.launch {
             api.events.collect { event ->
                 val sessionId = mutableState.value.currentSessionId ?: return@collect
-                val stream = DesktopChatReducer(sessionId).reduce(mutableState.value.streamState(), event)
-                dispatch(ChatAction.StreamUpdated(stream))
+                when (event.type) {
+                    "approval.request" -> dispatch(
+                        ChatAction.ApprovalRequested(
+                            ApprovalRequest(
+                                command = event.payload["command"] as? String ?: "",
+                                description = event.payload["description"] as? String ?: "Dangerous command",
+                                allowPermanent = event.payload["allow_permanent"] as? Boolean ?: true,
+                            ),
+                        ),
+                    )
+                    "clarify.request" -> dispatch(
+                        ChatAction.ClarificationRequested(
+                            ClarificationRequest(
+                                requestId = event.payload["request_id"] as? String ?: return@collect,
+                                question = event.payload["question"] as? String ?: "Hermes needs more information",
+                                choices = (event.payload["choices"] as? List<*>)?.mapNotNull { it as? String }.orEmpty(),
+                            ),
+                        ),
+                    )
+                    else -> {
+                        val stream = DesktopChatReducer(sessionId).reduce(mutableState.value.streamState(), event)
+                        dispatch(ChatAction.StreamUpdated(stream))
+                    }
+                }
             }
         }
         refreshSessions()
@@ -74,6 +96,22 @@ class ChatViewModel(private val api: DesktopHermesApi) : ViewModel() {
         launchAction {
             api.interrupt(sessionId)
             dispatch(ChatAction.Interrupted)
+        }
+    }
+
+    fun answerApproval(choice: String) {
+        val sessionId = mutableState.value.currentSessionId ?: return
+        launchAction {
+            check(api.respondToApproval(sessionId, choice)) { "Hermes did not accept the approval response" }
+            dispatch(ChatAction.RequestAnswered)
+        }
+    }
+
+    fun answerClarification(answer: String) {
+        val requestId = mutableState.value.clarification?.requestId ?: return
+        launchAction {
+            check(api.respondToClarification(requestId, answer)) { "Hermes did not accept the answer" }
+            dispatch(ChatAction.RequestAnswered)
         }
     }
 

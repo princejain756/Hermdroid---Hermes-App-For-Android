@@ -53,4 +53,26 @@ class ChatStateReducerTest {
         assertEquals("provider/model-c", state.selectedModelId)
         assertFalse(state.busy)
     }
+
+    @Test
+    fun `agent requests remain visible until answered`() {
+        var state = reduceChatState(
+            ChatUiState(),
+            ChatAction.ApprovalRequested(
+                ApprovalRequest("rm -rf build", "Delete generated files", allowPermanent = false),
+            ),
+        )
+        assertEquals("rm -rf build", state.approval?.command)
+
+        state = reduceChatState(state, ChatAction.RequestAnswered)
+        assertEquals(null, state.approval)
+
+        state = reduceChatState(
+            state,
+            ChatAction.ClarificationRequested(
+                ClarificationRequest("request-1", "Which platform?", listOf("Android", "iOS")),
+            ),
+        )
+        assertEquals(listOf("Android", "iOS"), state.clarification?.choices)
+    }
 }
