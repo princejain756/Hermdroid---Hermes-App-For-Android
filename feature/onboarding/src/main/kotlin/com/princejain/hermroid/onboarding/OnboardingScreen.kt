@@ -48,7 +48,6 @@ data class OnboardingState(
 class OnboardingViewModel : ViewModel() {
     private val mutable = MutableStateFlow(OnboardingState())
     val state = mutable.asStateFlow()
-    private var desktopRpc: DesktopJsonRpcClient? = null
 
     fun url(value: String) = update { copy(url = value, detectedProtocol = null, error = null) }
     fun protocol(value: ServerProtocol) = update { copy(protocolChoice = value, detectedProtocol = null, needsPassword = false, error = null) }
@@ -95,8 +94,8 @@ class OnboardingViewModel : ViewModel() {
         }
         api.login(selected, mutable.value.username, mutable.value.password)
         val ticket = api.ticket()
-        desktopRpc?.disconnect()
-        desktopRpc = DesktopJsonRpcClient(address).also { it.connect(ticket.ticket) }
+        val desktopRpc = DesktopJsonRpcClient(address).also { it.connect(ticket.ticket) }
+        DefaultHermesConnectionManager.attachDesktop(address, desktopRpc)
         update { copy(loading = false, connected = true, needsPassword = false, password = "") }
     }
 
@@ -116,7 +115,6 @@ class OnboardingViewModel : ViewModel() {
     }
 
     private fun update(block: OnboardingState.() -> OnboardingState) { mutable.value = mutable.value.block() }
-    override fun onCleared() { desktopRpc?.disconnect() }
 }
 
 @Composable fun OnboardingRoute(vm: OnboardingViewModel = viewModel()) {
