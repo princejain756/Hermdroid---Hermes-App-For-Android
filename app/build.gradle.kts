@@ -53,6 +53,7 @@ android {
 dependencies {
     implementation(project(":core:design"))
     implementation(project(":feature:onboarding"))
+    implementation(project(":feature:chat"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

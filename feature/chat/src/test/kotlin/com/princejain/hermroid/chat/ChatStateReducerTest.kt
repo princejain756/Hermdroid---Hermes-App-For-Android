@@ -1,0 +1,56 @@
+package com.princejain.hermroid.chat
+
+import com.princejain.hermroid.model.ChatMessage
+import com.princejain.hermroid.model.ChatRole
+import com.princejain.hermroid.model.HermesModel
+import com.princejain.hermroid.model.HermesSession
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ChatStateReducerTest {
+    @Test
+    fun `opening session replaces transcript and selects current model`() {
+        val state = reduceChatState(
+            ChatUiState(),
+            ChatAction.SessionOpened(
+                sessionId = "sid-1",
+                messages = listOf(ChatMessage("m1", ChatRole.USER, "Hello")),
+                models = listOf(
+                    HermesModel("provider/model-a", "provider"),
+                    HermesModel("provider/model-b", "provider", current = true),
+                ),
+            ),
+        )
+
+        assertEquals("sid-1", state.currentSessionId)
+        assertEquals("Hello", state.messages.single().text)
+        assertEquals("provider/model-b", state.selectedModelId)
+        assertFalse(state.loading)
+    }
+
+    @Test
+    fun `sending appends user message clears composer and marks busy`() {
+        val initial = ChatUiState(currentSessionId = "sid-1", draft = "Build it")
+
+        val state = reduceChatState(initial, ChatAction.SendStarted(messageId = "local-1"))
+
+        assertEquals("", state.draft)
+        assertEquals("Build it", state.messages.single().text)
+        assertEquals(ChatRole.USER, state.messages.single().role)
+        assertTrue(state.busy)
+    }
+
+    @Test
+    fun `session model and interrupt actions update only their state`() {
+        val sessions = listOf(HermesSession("sid-2", "Second"), HermesSession("sid-1", "First", current = true))
+        var state = reduceChatState(ChatUiState(), ChatAction.SessionsLoaded(sessions))
+        state = reduceChatState(state, ChatAction.ModelSelected("provider/model-c"))
+        state = reduceChatState(state.copy(busy = true), ChatAction.Interrupted)
+
+        assertEquals(listOf("sid-1", "sid-2"), state.sessions.map { it.id })
+        assertEquals("provider/model-c", state.selectedModelId)
+        assertFalse(state.busy)
+    }
+}
