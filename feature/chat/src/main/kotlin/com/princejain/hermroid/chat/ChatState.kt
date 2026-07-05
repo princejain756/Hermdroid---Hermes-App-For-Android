@@ -1,5 +1,6 @@
 package com.princejain.hermroid.chat
 
+import com.princejain.hermroid.automation.AndroidAction
 import com.princejain.hermroid.model.ChatMessage
 import com.princejain.hermroid.model.ChatRole
 import com.princejain.hermroid.model.ChatStreamState
@@ -34,6 +35,7 @@ data class ChatUiState(
     val error: String? = null,
     val approval: ApprovalRequest? = null,
     val clarification: ClarificationRequest? = null,
+    val pendingAndroidAction: AndroidAction? = null,
 )
 
 sealed interface ChatAction {
@@ -51,6 +53,9 @@ sealed interface ChatAction {
     data class ApprovalRequested(val request: ApprovalRequest) : ChatAction
     data class ClarificationRequested(val request: ClarificationRequest) : ChatAction
     data object RequestAnswered : ChatAction
+    data class AndroidActionRequested(val action: AndroidAction) : ChatAction
+    data class AndroidActionCompleted(val description: String, val messageId: String) : ChatAction
+    data object AndroidActionCancelled : ChatAction
     data object Interrupted : ChatAction
     data class Failed(val message: String) : ChatAction
 }
@@ -93,6 +98,16 @@ fun reduceChatState(state: ChatUiState, action: ChatAction): ChatUiState = when 
     is ChatAction.ApprovalRequested -> state.copy(approval = action.request)
     is ChatAction.ClarificationRequested -> state.copy(clarification = action.request)
     ChatAction.RequestAnswered -> state.copy(approval = null, clarification = null)
+    is ChatAction.AndroidActionRequested -> state.copy(
+        pendingAndroidAction = action.action,
+        draft = "",
+        error = null,
+    )
+    is ChatAction.AndroidActionCompleted -> state.copy(
+        pendingAndroidAction = null,
+        messages = state.messages + ChatMessage(action.messageId, ChatRole.SYSTEM, action.description),
+    )
+    ChatAction.AndroidActionCancelled -> state.copy(pendingAndroidAction = null)
     ChatAction.Interrupted -> state.copy(busy = false)
     is ChatAction.Failed -> state.copy(loading = false, busy = false, error = action.message)
 }

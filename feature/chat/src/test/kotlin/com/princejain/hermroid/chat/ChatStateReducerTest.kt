@@ -4,6 +4,7 @@ import com.princejain.hermroid.model.ChatMessage
 import com.princejain.hermroid.model.ChatRole
 import com.princejain.hermroid.model.HermesModel
 import com.princejain.hermroid.model.HermesSession
+import com.princejain.hermroid.automation.AndroidAction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,5 +75,20 @@ class ChatStateReducerTest {
             ),
         )
         assertEquals(listOf("Android", "iOS"), state.clarification?.choices)
+    }
+
+    @Test
+    fun `Android action waits for confirmation and records result`() {
+        var state = reduceChatState(
+            ChatUiState(draft = "open WhatsApp"),
+            ChatAction.AndroidActionRequested(AndroidAction.OpenApp("WhatsApp")),
+        )
+        assertEquals(AndroidAction.OpenApp("WhatsApp"), state.pendingAndroidAction)
+        assertEquals("", state.draft)
+
+        state = reduceChatState(state, ChatAction.AndroidActionCompleted("Opened WhatsApp", "action-1"))
+        assertEquals(null, state.pendingAndroidAction)
+        assertEquals("Opened WhatsApp", state.messages.single().text)
+        assertEquals(ChatRole.SYSTEM, state.messages.single().role)
     }
 }

@@ -1,5 +1,10 @@
 package com.princejain.hermroid.chat
 
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,16 +31,56 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.princejain.hermroid.automation.ActionResult
+import com.princejain.hermroid.automation.AndroidAction
+import com.princejain.hermroid.automation.AndroidActionExecutor
+import com.princejain.hermroid.automation.FileCompressor
 import com.princejain.hermroid.model.ChatMessage
 import com.princejain.hermroid.model.ChatRole
 import com.princejain.hermroid.model.HermesSession
 import com.princejain.hermroid.network.DesktopHermesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ChatRoute(api: DesktopHermesApi, onDisconnect: () -> Unit) {
-    val vm: ChatViewModel = viewModel(factory = ChatViewModel.factory(api))
+    val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("hermroid_settings", Context.MODE_PRIVATE) }
+    var trustedMode by remember { mutableStateOf(preferences.getBoolean("trusted_mode", false)) }
+    val scope = rememberCoroutineScope()
+    val actionExecutor = remember { AndroidActionExecutor(context.applicationContext) }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            runCatching { withContext(Dispatchers.IO) { FileCompressor(context).compress(uris) } }
+                .onSuccess { zip ->
+                    val share = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/zip"
+                        putExtra(Intent.EXTRA_STREAM, zip)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(share, "Share compressed files"))
+                }
+        }
+    }
+    val execute: (AndroidAction) -> ActionResult = { action ->
+        when (action) {
+            AndroidAction.CompressFiles -> {
+                filePicker.launch(arrayOf("*/*"))
+                ActionResult.Completed("Choose files to create a ZIP archive")
+            }
+            else -> actionExecutor.execute(action).also { result ->
+                if (result is ActionResult.RequiresAccessibilityPermission) {
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }
+            }
+        }
+    }
+    val vm: ChatViewModel = viewModel(
+        factory = ChatViewModel.factory(api, execute) { trustedMode },
+    )
     val state by vm.state.collectAsState()
     ChatScreen(
         state = state,
@@ -47,6 +92,13 @@ fun ChatRoute(api: DesktopHermesApi, onDisconnect: () -> Unit) {
         onModel = vm::selectModel,
         onApproval = vm::answerApproval,
         onClarification = vm::answerClarification,
+        onApproveAndroid = vm::approveAndroidAction,
+        onCancelAndroid = vm::cancelAndroidAction,
+        trustedMode = trustedMode,
+        onTrustedMode = { enabled ->
+            trustedMode = enabled
+            preferences.edit().putBoolean("trusted_mode", enabled).apply()
+        },
         onDisconnect = onDisconnect,
     )
 }
@@ -63,6 +115,10 @@ private fun ChatScreen(
     onModel: (String) -> Unit,
     onApproval: (String) -> Unit,
     onClarification: (String) -> Unit,
+    onApproveAndroid: () -> Unit,
+    onCancelAndroid: () -> Unit,
+    trustedMode: Boolean,
+    onTrustedMode: (Boolean) -> Unit,
     onDisconnect: () -> Unit,
 ) {
     var showModels by remember { mutableStateOf(false) }
@@ -70,7 +126,7 @@ private fun ChatScreen(
         val tablet = maxWidth >= 760.dp
         if (tablet) {
             Row(Modifier.fillMaxSize().systemBarsPadding()) {
-                SessionPane(state, onSession, onNewSession, onDisconnect, Modifier.width(310.dp).fillMaxHeight())
+                SessionPane(state, onSession, onNewSession, onDisconnect, trustedMode, onTrustedMode, Modifier.width(310.dp).fillMaxHeight())
                 VerticalDivider()
                 Conversation(state, onDraft, onSend, onInterrupt, { showModels = true }, null, Modifier.weight(1f))
             }
@@ -86,6 +142,8 @@ private fun ChatScreen(
                             { scope.launch { drawer.close() }; onSession(it) },
                             { scope.launch { drawer.close() }; onNewSession() },
                             onDisconnect,
+                            trustedMode,
+                            onTrustedMode,
                             Modifier.fillMaxSize(),
                         )
                     }
@@ -108,6 +166,28 @@ private fun ChatScreen(
     }
     state.approval?.let { ApprovalDialog(it, onApproval) }
     state.clarification?.let { ClarificationDialog(it, onClarification) }
+    state.pendingAndroidAction?.let { action ->
+        AndroidActionDialog(action, onApproveAndroid, onCancelAndroid)
+    }
+}
+
+@Composable
+private fun AndroidActionDialog(action: AndroidAction, onApprove: () -> Unit, onCancel: () -> Unit) {
+    val description = when (action) {
+        is AndroidAction.OpenApp -> "Open ${action.appName}"
+        is AndroidAction.Global -> "Perform Android navigation: ${action.action.name.lowercase()}"
+        is AndroidAction.TapText -> "Tap the control labelled “${action.text}”"
+        is AndroidAction.InputText -> "Enter text into the focused field: ${action.text}"
+        is AndroidAction.WhatsAppMessage -> "Open a WhatsApp message to ${action.phone}: ${action.message}"
+        AndroidAction.CompressFiles -> "Choose files and create a ZIP archive"
+    }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Allow Android action?") },
+        text = { Text(description) },
+        confirmButton = { Button(onClick = onApprove) { Text("Allow") } },
+        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -168,6 +248,8 @@ private fun SessionPane(
     onSession: (String) -> Unit,
     onNewSession: () -> Unit,
     onDisconnect: () -> Unit,
+    trustedMode: Boolean,
+    onTrustedMode: (Boolean) -> Unit,
     modifier: Modifier,
 ) {
     Column(modifier.background(MaterialTheme.colorScheme.surface).padding(18.dp)) {
@@ -187,6 +269,13 @@ private fun SessionPane(
             items(state.sessions, key = { it.id }) { session ->
                 SessionRow(session, session.id == state.currentSessionId) { onSession(session.id) }
             }
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Trusted mode", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                Text("Skip action confirmations", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = trustedMode, onCheckedChange = onTrustedMode)
         }
         TextButton(onClick = onDisconnect) { Icon(Icons.Rounded.Close, null); Spacer(Modifier.width(8.dp)); Text("Disconnect server") }
     }

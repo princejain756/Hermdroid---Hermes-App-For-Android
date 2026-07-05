@@ -3,6 +3,10 @@ package com.princejain.hermroid.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.princejain.hermroid.automation.ActionPolicy
+import com.princejain.hermroid.automation.ActionResult
+import com.princejain.hermroid.automation.AndroidAction
+import com.princejain.hermroid.automation.AndroidCommandParser
 import com.princejain.hermroid.network.DesktopChatReducer
 import com.princejain.hermroid.network.DesktopHermesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,10 +14,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicLong
 
-class ChatViewModel(private val api: DesktopHermesApi) : ViewModel() {
+class ChatViewModel(
+    private val api: DesktopHermesApi,
+    private val executeAndroidAction: (AndroidAction) -> ActionResult,
+    private val trustedMode: () -> Boolean,
+) : ViewModel() {
     private val mutableState = MutableStateFlow(ChatUiState())
     val state = mutableState.asStateFlow()
     private val localIds = AtomicLong()
+    private val commandParser = AndroidCommandParser()
 
     init {
         viewModelScope.launch {
@@ -79,6 +88,11 @@ class ChatViewModel(private val api: DesktopHermesApi) : ViewModel() {
         val sessionId = mutableState.value.currentSessionId ?: return
         val text = mutableState.value.draft.trim()
         if (text.isEmpty() || mutableState.value.busy) return
+        commandParser.parse(text)?.let { action ->
+            dispatch(ChatAction.AndroidActionRequested(action))
+            if (!ActionPolicy(trustedMode()).requiresConfirmation(action)) executeAndroid(action)
+            return
+        }
         dispatch(ChatAction.SendStarted("local-${localIds.incrementAndGet()}"))
         launchAction { check(api.submit(sessionId, text)) { "Hermes did not accept the message" } }
     }
@@ -115,6 +129,22 @@ class ChatViewModel(private val api: DesktopHermesApi) : ViewModel() {
         }
     }
 
+    fun approveAndroidAction() {
+        mutableState.value.pendingAndroidAction?.let(::executeAndroid)
+    }
+
+    fun cancelAndroidAction() = dispatch(ChatAction.AndroidActionCancelled)
+
+    private fun executeAndroid(action: AndroidAction) {
+        val description = when (val result = executeAndroidAction(action)) {
+            is ActionResult.Completed -> result.description
+            is ActionResult.Failed -> result.message
+            ActionResult.RequiresAccessibilityPermission -> "Enable Hermroid in Android Accessibility settings, then try again."
+            ActionResult.RequiresFilePicker -> "Choose the files to compress."
+        }
+        dispatch(ChatAction.AndroidActionCompleted(description, "action-${localIds.incrementAndGet()}"))
+    }
+
     private fun dispatch(action: ChatAction) {
         mutableState.value = reduceChatState(mutableState.value, action)
     }
@@ -128,9 +158,14 @@ class ChatViewModel(private val api: DesktopHermesApi) : ViewModel() {
     }
 
     companion object {
-        fun factory(api: DesktopHermesApi) = object : ViewModelProvider.Factory {
+        fun factory(
+            api: DesktopHermesApi,
+            executeAndroidAction: (AndroidAction) -> ActionResult,
+            trustedMode: () -> Boolean,
+        ) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = ChatViewModel(api) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                ChatViewModel(api, executeAndroidAction, trustedMode) as T
         }
     }
 }
