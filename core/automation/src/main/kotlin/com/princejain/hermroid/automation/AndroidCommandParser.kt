@@ -19,6 +19,10 @@ class AndroidCommandParser {
                 AndroidAction.Global(AndroidGlobalAction.NOTIFICATIONS)
             text.equals("compress files", true) || text.equals("zip files", true) ->
                 AndroidAction.CompressFiles
+            launcherColumns.matches(text) -> launcherColumns.matchEntire(text)!!.groupValues[1]
+                .toIntOrNull()
+                ?.takeIf { it in 3..8 }
+                ?.let(AndroidAction::SetLauncherColumns)
             openApp.matches(text) ->
                 AndroidAction.OpenApp(openApp.matchEntire(text)!!.groupValues[1].trim().trim('"'))
             tap.matches(text) ->
@@ -37,5 +41,9 @@ class AndroidCommandParser {
         val openApp = Regex("^(?:open|launch)\\s+(.+)$", RegexOption.IGNORE_CASE)
         val tap = Regex("^(?:tap|press|click)\\s+(.+)$", RegexOption.IGNORE_CASE)
         val input = Regex("^(?:type|enter)\\s+(.+)$", RegexOption.IGNORE_CASE)
+        val launcherColumns = Regex(
+            "^(?:set|change)\\s+(?:the\\s+)?(?:home screen|launcher)(?:\\s+layout)?\\s+to\\s+(\\d+)\\s+columns?$",
+            RegexOption.IGNORE_CASE,
+        )
     }
 }

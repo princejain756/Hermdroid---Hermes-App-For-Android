@@ -15,6 +15,7 @@ class AndroidActionExecutor(private val context: Context) {
     fun execute(action: AndroidAction): ActionResult = when (action) {
         is AndroidAction.OpenApp -> openApp(action.appName)
         is AndroidAction.WhatsAppMessage -> openWhatsApp(action.phone, action.message)
+        is AndroidAction.SetLauncherColumns -> setLauncherColumns(action.columns)
         is AndroidAction.Global -> withAccessibility { service ->
             service.global(action.action)
         }
@@ -50,6 +51,14 @@ class AndroidActionExecutor(private val context: Context) {
             .recoverCatching { context.startActivity(intent.setPackage("com.whatsapp.w4b")) }
             .getOrElse { return ActionResult.Failed("WhatsApp is not installed") }
         return ActionResult.Completed("Opened WhatsApp message for $phone")
+    }
+
+    private fun setLauncherColumns(columns: Int): ActionResult {
+        context.getSharedPreferences("hermroid_launcher", Context.MODE_PRIVATE)
+            .edit()
+            .putInt("columns", columns.coerceIn(3, 8))
+            .apply()
+        return ActionResult.Completed("Hermroid launcher changed to $columns columns")
     }
 
     private fun withAccessibility(action: (HermroidAccessibilityService) -> Boolean): ActionResult {

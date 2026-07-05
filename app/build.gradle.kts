@@ -56,6 +56,7 @@ dependencies {
     implementation(project(":core:automation"))
     implementation(project(":feature:onboarding"))
     implementation(project(":feature:chat"))
+    implementation(project(":feature:launcher"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

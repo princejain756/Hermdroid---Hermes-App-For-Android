@@ -16,6 +16,7 @@ class AndroidCommandParserTest {
         assertEquals(AndroidAction.Global(AndroidGlobalAction.HOME), parser.parse("go home"))
         assertEquals(AndroidAction.TapText("Send"), parser.parse("tap Send"))
         assertEquals(AndroidAction.InputText("hello world"), parser.parse("type hello world"))
+        assertEquals(AndroidAction.SetLauncherColumns(5), parser.parse("set home screen to 5 columns"))
     }
 
     @Test

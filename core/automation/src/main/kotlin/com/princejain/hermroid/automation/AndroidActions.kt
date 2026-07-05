@@ -10,6 +10,7 @@ sealed interface AndroidAction {
     data class TapText(val text: String) : AndroidAction
     data class InputText(val text: String) : AndroidAction
     data class WhatsAppMessage(val phone: String, val message: String) : AndroidAction
+    data class SetLauncherColumns(val columns: Int) : AndroidAction
     data object CompressFiles : AndroidAction
 
     val risk: ActionRisk

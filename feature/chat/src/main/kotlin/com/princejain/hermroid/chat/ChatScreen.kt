@@ -179,6 +179,7 @@ private fun AndroidActionDialog(action: AndroidAction, onApprove: () -> Unit, on
         is AndroidAction.TapText -> "Tap the control labelled “${action.text}”"
         is AndroidAction.InputText -> "Enter text into the focused field: ${action.text}"
         is AndroidAction.WhatsAppMessage -> "Open a WhatsApp message to ${action.phone}: ${action.message}"
+        is AndroidAction.SetLauncherColumns -> "Change the Hermroid home screen to ${action.columns} columns"
         AndroidAction.CompressFiles -> "Choose files and create a ZIP archive"
     }
     AlertDialog(
