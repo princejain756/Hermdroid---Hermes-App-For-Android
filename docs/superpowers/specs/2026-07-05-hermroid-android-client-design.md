@@ -8,7 +8,7 @@ License: MIT
 
 ## 1. Product definition
 
-Hermroid is a native Android control surface for a self-hosted Hermes agent. It connects to `hermes-webui`; the agent, tools, models, memory, and files remain on the user's server. Hermroid owns the Android interaction, local cache, background behavior, and presentation.
+Hermroid is a native Android control surface for a self-hosted Hermes agent. It connects directly to either the official Hermes Desktop backend or a compatible `hermes-webui` server. The agent, tools, models, memory, and files remain on the user's server. Hermroid owns the Android interaction, local cache, background behavior, and presentation.
 
 Hermroid will provide the feature depth of Hermex with an Android application written in Kotlin and Jetpack Compose. The interface will closely follow Hermex's bright, compact, glass-forward design while using Android lifecycle, navigation, accessibility, and system-integration APIs.
 
@@ -19,6 +19,7 @@ Hermroid is an independent project. It is not affiliated with the Hermex author,
 Hermroid must:
 
 - match the current Hermex product contract, including advanced chat and server-management flows;
+- support official Hermes Desktop and `hermes-webui` through one consistent interface;
 - render long, streaming agent conversations without visible layout instability;
 - survive rotation, process death, temporary network loss, and app backgrounding;
 - keep server credentials and custom authentication headers encrypted at rest;
@@ -42,10 +43,11 @@ The first public release excludes:
 
 Initial development references:
 
+- official Hermes Agent commit `b837f07dcd9092105ca56a4d856be91196e09d81` (`v2026.7.1-33-gb837f07dc`);
 - Hermex commit `f6196cb77fa765a0b6a20afe77bdfb06fce05735`;
 - Hermex-tested `hermes-webui` commit `f1d399b437c1ca7fe4b6d2093aebe334c32f34a3`.
 
-The repository will record both pins. Updating either pin requires passing contract tests and real-server smoke tests. Models must ignore unknown fields and decode optional or historically inconsistent fields defensively. The wire response from the pinned server remains authoritative.
+The repository will record all three pins. Updating a pin requires passing its contract tests and real-server smoke tests. Models must ignore unknown fields and decode optional or historically inconsistent fields defensively. The wire response from each pinned server remains authoritative.
 
 ## 5. Application architecture
 
@@ -56,7 +58,9 @@ Compose screen
     -> ViewModel and immutable UI state
         -> feature use case
             -> repository
-                -> REST/SSE client
+                -> HermesTransport
+                    -> DesktopTransport (REST + JSON-RPC WebSocket)
+                    -> WebUiTransport (REST + SSE)
                 -> Room cache
                 -> encrypted settings
 ```
@@ -65,7 +69,7 @@ The planned Gradle modules are:
 
 - `app`: application entry point, navigation, deep links, share target, lifecycle, and dependency graph;
 - `core:model`: API, database, and UI-domain models;
-- `core:network`: REST requests, cookie jar, SSE, multipart uploads, redirects, and custom headers;
+- `core:network`: transport detection, REST requests, cookie jars, JSON-RPC WebSocket, SSE, multipart uploads, redirects, and custom headers;
 - `core:database`: Room entities, migrations, DAOs, and cache policy;
 - `core:security`: Android Keystore-backed encryption and server-scoped secrets;
 - `core:design`: tokens, icons, typography, motion, reusable surfaces, and adaptive layout primitives;
@@ -74,13 +78,15 @@ The planned Gradle modules are:
 
 Feature modules depend on core interfaces, not concrete network or database implementations. ViewModels expose `StateFlow` values and receive user actions through explicit functions. Compose functions render state and emit actions; they do not call network or database code.
 
+`HermesTransport` exposes domain operations for capabilities, authentication, sessions, messages, models, profiles, tasks, skills, memory, analytics, files, Git, and live runs. Transport adapters translate protocol-specific payloads into shared domain models. Feature code never branches on Desktop versus `hermes-webui`; it branches only on declared capabilities.
+
 ## 6. Platform and dependencies
 
 - Kotlin and Kotlin coroutines
 - Jetpack Compose with Material 3 foundations
 - Navigation Compose with type-safe destinations
 - Hilt dependency injection
-- OkHttp for REST, cookies, multipart transfer, and SSE transport
+- OkHttp for REST, cookies, multipart transfer, SSE, and JSON-RPC WebSocket transport
 - Moshi for tolerant JSON decoding
 - Room for local session and message data
 - DataStore for non-secret preferences
@@ -97,6 +103,8 @@ The app keeps the existing minimum SDK 26 unless a verified dependency forces an
 
 - welcome and feature overview;
 - HTTPS server URL entry and normalization;
+- automatic protocol detection with explicit Official Desktop and `hermes-webui` overrides under Advanced settings;
+- a verified protocol badge after detection;
 - localhost and Tailscale HTTP exceptions;
 - health and authentication-status checks;
 - password authentication with a persistent, server-scoped cookie jar;
@@ -107,6 +115,8 @@ The app keeps the existing minimum SDK 26 unless a verified dependency forces an
 - passkey-only server explanation when password authentication is unavailable.
 
 Adding or probing a server must never mutate the active server's headers, cookies, cache, or login state until the new connection succeeds.
+
+Protocol detection sends no credentials. Auto mode first requests the official Desktop discovery endpoint `GET /api/auth/providers`. A recognized response selects Desktop. Otherwise, Hermroid probes `GET /api/auth/status` and `GET /health` for `hermes-webui`. Ambiguous or blocked probes ask the user to choose a protocol; Hermroid never guesses after credentials are entered.
 
 ### 7.2 Sessions, projects, and profiles
 
@@ -191,6 +201,14 @@ Only one live stream may own a session at a time on one device. Opening the same
 - share target and deep links;
 - a home-screen widget for new chat, active-run status, and recent sessions.
 
+### 7.10 Transport behavior
+
+Official Desktop connections use its REST API for sessions, profiles, models, tasks, skills, memory, analytics, files, and Git. Live chat uses newline-delimited JSON-RPC 2.0 over `/api/ws`. Password authentication posts to `/auth/password-login`; authenticated clients mint a single-use, 30-second WebSocket ticket through `POST /api/auth/ws-ticket` for every connection attempt. The WebSocket URL carries only that ticket. The client waits for `gateway.ready`, sends requests with unique IDs, correlates responses, and maps `event` notifications such as `message.delta`, `reasoning.delta`, tool activity, approvals, clarifications, and completion into shared chat events.
+
+`hermes-webui` connections keep their cookie-authenticated REST and SSE flow. Chat starts through its REST endpoint and streams through SSE with stream IDs and status checks.
+
+Each saved server records `AUTO`, `DESKTOP`, or `WEB_UI`, the detected protocol version, and a capability snapshot. Auto detection runs during first connection and explicit retest, not on every launch. A server that changes protocol enters an incompatible-server state and requires confirmation before Hermroid replaces its cache metadata.
+
 ## 8. Streaming state machine
 
 A stream moves through these states:
@@ -207,7 +225,7 @@ idle
 
 The repository persists the session ID, stream ID, last event ID when available, partial assistant text, pending interaction, and terminal state. The UI renders the persisted state after recreation.
 
-On transport loss, Hermroid checks the stream-status endpoint. If the run remains active, it reconnects and resumes from the server-supported point. If status is terminal, it refreshes the session. Hermroid never resends the user's prompt automatically. Manual retry starts a new request only after explaining the state.
+On transport loss, Hermroid uses the adapter's recovery contract. `hermes-webui` checks the stream-status endpoint and resumes from the server-supported point. Desktop reconnects with a fresh WebSocket ticket, resumes the session through JSON-RPC, and refreshes history to reconcile missed events. Hermroid never resends the user's prompt automatically. Manual retry starts a new request only after explaining the state.
 
 When the app leaves the foreground during an active run, a foreground service owns the connection and exposes progress through a notification. The service stops after the stream reaches a terminal state and the cache is committed.
 
@@ -226,6 +244,8 @@ Cache writes occur in transactions at meaningful stream boundaries. Partial assi
 - Requests omit browser `Origin` and `Referer` headers.
 - Built-in `Accept` and `Content-Type` headers override custom values.
 - Authentication headers apply only to the configured origin and are stripped on cross-origin redirects.
+- Desktop WebSocket tickets remain in memory, are used once, and are never persisted or logged.
+- Desktop passwords and OAuth session cookies follow the server's published authentication flow; Hermroid never scrapes the Desktop application's injected loopback token.
 - External media and link-preview requests use a credential-free client.
 - Logs redact passwords, cookies, authorization values, custom secret headers, prompts, and message bodies.
 - Release builds disable verbose network logging.
@@ -287,7 +307,7 @@ Repositories return typed failures: network unavailable, timeout, unauthorized, 
 
 ### Contract tests
 
-MockWebServer replays redacted fixtures captured from the pinned `hermes-webui` commit. Contract tests cover health, authentication, sessions, chat start and streaming, models, profiles, projects, upload, tasks, skills, memory, usage, workspace, files, and Git endpoints. Pin updates require a fixture audit.
+MockWebServer replays redacted fixtures captured from both pinned backends. Contract tests cover protocol detection, authentication, sessions, chat start and streaming, models, profiles, projects, upload, tasks, skills, memory, usage, workspace, files, and Git endpoints. Desktop tests also cover ticket expiry, single use, JSON-RPC correlation, unknown notifications, reconnect reconciliation, and WebSocket close codes. Pin updates require a fixture audit.
 
 ### Persistence tests
 
@@ -349,6 +369,6 @@ The first public release requires:
 
 ## 17. Success criteria
 
-A new user can install Hermroid, connect securely to a supported `hermes-webui` server, find or create a session, run an agent task, inspect reasoning and tool progress, handle approvals or clarifications, leave the app, receive completion status, return to the same conversation, and inspect the resulting remote files without losing state.
+A new user can install Hermroid, connect securely to either a supported official Desktop backend or `hermes-webui` server, find or create a session, run an agent task, inspect reasoning and tool progress, handle approvals or clarifications, leave the app, receive completion status, return to the same conversation, and inspect the resulting remote files without losing state.
 
 A contributor can clone the repository, run deterministic tests without a live server, launch a documented development configuration, understand module ownership, and verify a change before opening a pull request.
