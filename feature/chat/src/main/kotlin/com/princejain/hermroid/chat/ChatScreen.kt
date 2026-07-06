@@ -3,11 +3,14 @@ package com.princejain.hermroid.chat
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -18,16 +21,20 @@ import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +59,10 @@ fun ChatRoute(api: HermesChatApi, onDisconnect: () -> Unit) {
     var trustedMode by remember { mutableStateOf(preferences.getBoolean("trusted_mode", false)) }
     val scope = rememberCoroutineScope()
     val actionExecutor = remember { AndroidActionExecutor(context.applicationContext) }
+    lateinit var vm: ChatViewModel
+    val speechInput = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.let { vm.draft(it) }
+    }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch {
             runCatching { withContext(Dispatchers.IO) { FileCompressor(context).compress(uris) } }
@@ -78,7 +89,7 @@ fun ChatRoute(api: HermesChatApi, onDisconnect: () -> Unit) {
             }
         }
     }
-    val vm: ChatViewModel = viewModel(
+    vm = viewModel(
         factory = ChatViewModel.factory(api, execute) { trustedMode },
     )
     val state by vm.state.collectAsState()
@@ -94,6 +105,14 @@ fun ChatRoute(api: HermesChatApi, onDisconnect: () -> Unit) {
         onClarification = vm::answerClarification,
         onApproveAndroid = vm::approveAndroidAction,
         onCancelAndroid = vm::cancelAndroidAction,
+        onVoice = {
+            speechInput.launch(
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to Hermes")
+                },
+            )
+        },
         trustedMode = trustedMode,
         onTrustedMode = { enabled ->
             trustedMode = enabled
@@ -119,6 +138,7 @@ private fun ChatScreen(
     onClarification: (String) -> Unit,
     onApproveAndroid: () -> Unit,
     onCancelAndroid: () -> Unit,
+    onVoice: () -> Unit,
     trustedMode: Boolean,
     onTrustedMode: (Boolean) -> Unit,
     onAccessibilitySettings: () -> Unit,
@@ -132,7 +152,7 @@ private fun ChatScreen(
             Row(Modifier.fillMaxSize().systemBarsPadding()) {
                 SessionPane(state, onSession, onNewSession, onDisconnect, trustedMode, onTrustedMode, onAccessibilitySettings, onHomeSettings, Modifier.width(310.dp).fillMaxHeight())
                 VerticalDivider()
-                Conversation(state, onDraft, onSend, onInterrupt, { showModels = true }, null, Modifier.weight(1f))
+                Conversation(state, onDraft, onSend, onInterrupt, { showModels = true }, onVoice, null, Modifier.weight(1f))
             }
         } else {
             val drawer = rememberDrawerState(DrawerValue.Closed)
@@ -161,6 +181,7 @@ private fun ChatScreen(
                     onSend,
                     onInterrupt,
                     { showModels = true },
+                    onVoice,
                     { scope.launch { drawer.open() } },
                     Modifier.fillMaxSize().systemBarsPadding(),
                 )
@@ -310,6 +331,7 @@ private fun Conversation(
     onSend: () -> Unit,
     onInterrupt: () -> Unit,
     onModels: () -> Unit,
+    onVoice: () -> Unit,
     onMenu: (() -> Unit)?,
     modifier: Modifier,
 ) {
@@ -342,7 +364,7 @@ private fun Conversation(
                 state.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } }
             }
         }
-        Composer(state, onDraft, onSend, onInterrupt, onModels)
+        Composer(state, onDraft, onSend, onInterrupt, onModels, onVoice)
     }
 }
 
@@ -369,10 +391,55 @@ private fun MessageCard(message: ChatMessage) {
             Column(Modifier.padding(horizontal = if (user) 16.dp else 4.dp, vertical = 12.dp)) {
                 if (!user) Text("HERMES", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
                 if (!user) Spacer(Modifier.height(7.dp))
-                Text(message.text.ifEmpty { "Thinking…" }, style = MaterialTheme.typography.bodyLarge, lineHeight = 24.sp)
+                MessageBody(message.text.ifEmpty { "Thinking…" })
                 if (message.reasoning.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
                     Text(message.reasoning, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageBody(text: String) {
+    val clipboard = LocalClipboardManager.current
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        parseMessageSegments(text).forEachIndexed { index, segment ->
+            when (segment) {
+                is MessageSegment.Prose -> Text(
+                    segment.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    lineHeight = 24.sp,
+                )
+                is MessageSegment.Code -> Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .72f),
+                ) {
+                    Column {
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                segment.language.ifBlank { "Code" },
+                                Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            IconButton(
+                                onClick = { clipboard.setText(AnnotatedString(segment.code)) },
+                                modifier = Modifier.size(34.dp),
+                            ) { Icon(Icons.Rounded.ContentCopy, "Copy code block ${index + 1}", Modifier.size(16.dp)) }
+                        }
+                        Text(
+                            segment.code,
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 12.dp),
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                            lineHeight = 20.sp,
+                        )
+                    }
                 }
             }
         }
@@ -398,7 +465,7 @@ private fun ActivityCard(state: ChatUiState) {
 }
 
 @Composable
-private fun Composer(state: ChatUiState, onDraft: (String) -> Unit, onSend: () -> Unit, onInterrupt: () -> Unit, onModels: () -> Unit) {
+private fun Composer(state: ChatUiState, onDraft: (String) -> Unit, onSend: () -> Unit, onInterrupt: () -> Unit, onModels: () -> Unit, onVoice: () -> Unit) {
     Surface(shadowElevation = 10.dp, tonalElevation = 2.dp) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)) {
             OutlinedTextField(
@@ -410,12 +477,17 @@ private fun Composer(state: ChatUiState, onDraft: (String) -> Unit, onSend: () -
                 maxLines = 5,
                 shape = RoundedCornerShape(20.dp),
                 trailingIcon = {
-                    FilledIconButton(
-                        onClick = if (state.busy) onInterrupt else onSend,
-                        enabled = state.busy || state.draft.isNotBlank(),
-                        modifier = Modifier.size(38.dp),
-                    ) {
-                        Icon(if (state.busy) Icons.Rounded.Stop else Icons.Rounded.ArrowUpward, if (state.busy) "Stop" else "Send", Modifier.size(19.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onVoice, modifier = Modifier.size(38.dp)) {
+                            Icon(Icons.Rounded.Mic, "Voice input", Modifier.size(19.dp))
+                        }
+                        FilledIconButton(
+                            onClick = if (state.busy) onInterrupt else onSend,
+                            enabled = state.busy || state.draft.isNotBlank(),
+                            modifier = Modifier.size(38.dp),
+                        ) {
+                            Icon(if (state.busy) Icons.Rounded.Stop else Icons.Rounded.ArrowUpward, if (state.busy) "Stop" else "Send", Modifier.size(19.dp))
+                        }
                     }
                 },
             )
