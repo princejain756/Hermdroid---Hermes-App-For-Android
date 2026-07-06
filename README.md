@@ -53,7 +53,7 @@ Requirements:
 
 ## Connect
 
-1. Make the Hermes server reachable from your phone through HTTPS or a private Tailscale address.
+1. Make the Hermes server reachable from your phone through HTTPS, a private LAN address, or Tailscale.
 2. Open Hermroid and enter the complete server URL, including its port.
 3. Keep protocol detection on **Auto**, or choose **Official Desktop** / **hermes-webui** manually.
 4. Enter the server credentials and connect.

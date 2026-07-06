@@ -17,7 +17,14 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 }
 class InvalidServerAddress(message: String) : IllegalArgumentException(message)
 private fun HttpUrl.isSafeCleartext(): Boolean {
-    if (host in setOf("localhost", "127.0.0.1", "10.0.2.2")) return true
+    if (host in setOf("localhost", "127.0.0.1", "::1", "10.0.2.2")) return true
     val parts = host.split('.').mapNotNull(String::toIntOrNull)
-    return parts.size == 4 && parts[0] == 100 && parts[1] in 64..127 && parts.drop(2).all { it in 0..255 }
+    if (parts.size != 4 || parts.any { it !in 0..255 }) return false
+    return when (parts[0]) {
+        10 -> true
+        172 -> parts[1] in 16..31
+        192 -> parts[1] == 168
+        100 -> parts[1] in 64..127
+        else -> false
+    }
 }
