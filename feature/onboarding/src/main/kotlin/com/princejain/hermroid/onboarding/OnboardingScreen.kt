@@ -1,5 +1,6 @@
 package com.princejain.hermroid.onboarding
 
+import android.app.Application
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -19,13 +20,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewModelScope
 import com.princejain.hermroid.design.R as DesignR
 import com.princejain.hermroid.model.ServerAddress
 import com.princejain.hermroid.model.ServerProtocol
 import com.princejain.hermroid.network.*
+import com.princejain.hermroid.security.EncryptedConnectionStore
+import com.princejain.hermroid.security.SavedConnection
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -42,12 +45,30 @@ data class OnboardingState(
     val loading: Boolean = false,
     val needsPassword: Boolean = false,
     val connected: Boolean = false,
+    val rememberConnection: Boolean = true,
     val error: String? = null,
 )
 
-class OnboardingViewModel : ViewModel() {
+class OnboardingViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(OnboardingState())
+    private val savedConnections = EncryptedConnectionStore(application)
     val state = mutable.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            runCatching { savedConnections.load() }.getOrNull()?.let { saved ->
+                update {
+                    copy(
+                        url = saved.url,
+                        protocolChoice = runCatching { ServerProtocol.valueOf(saved.protocol) }.getOrDefault(ServerProtocol.AUTO),
+                        provider = saved.provider,
+                        username = saved.username,
+                        password = saved.password,
+                    )
+                }
+            }
+        }
+    }
 
     fun url(value: String) = update { copy(url = value, detectedProtocol = null, error = null) }
     fun protocol(value: ServerProtocol) = update { copy(protocolChoice = value, detectedProtocol = null, needsPassword = false, error = null) }
@@ -55,6 +76,7 @@ class OnboardingViewModel : ViewModel() {
     fun password(value: String) = update { copy(password = value, error = null) }
     fun provider(value: String) = update { copy(provider = value, error = null) }
     fun toggle() = update { copy(showPassword = !showPassword) }
+    fun rememberConnection(value: Boolean) = update { copy(rememberConnection = value) }
 
     fun connect() {
         if (mutable.value.loading) return
@@ -96,6 +118,7 @@ class OnboardingViewModel : ViewModel() {
         val ticket = api.ticket()
         val desktopRpc = DesktopJsonRpcClient(address).also { it.connect(ticket.ticket) }
         DefaultHermesConnectionManager.attachDesktop(address, desktopRpc)
+        persistConnection(address, ServerProtocol.DESKTOP)
         update { copy(loading = false, connected = true, needsPassword = false, password = "") }
     }
 
@@ -112,7 +135,27 @@ class OnboardingViewModel : ViewModel() {
             require(api.login(mutable.value.password).ok == true) { "Incorrect password" }
         }
         DefaultHermesConnectionManager.attachWebUi(address, api.chatApi())
+        persistConnection(address, ServerProtocol.WEB_UI)
         update { copy(loading = false, connected = true, needsPassword = false, password = "") }
+    }
+
+    private suspend fun persistConnection(address: ServerAddress, protocol: ServerProtocol) {
+        if (!mutable.value.rememberConnection) {
+            runCatching { savedConnections.clear() }
+            return
+        }
+        val current = mutable.value
+        runCatching {
+            savedConnections.save(
+                SavedConnection(
+                    url = address.baseUrl.toString(),
+                    protocol = protocol.name,
+                    provider = current.provider,
+                    username = current.username,
+                    password = current.password,
+                ),
+            )
+        }
     }
 
     private fun update(block: OnboardingState.() -> OnboardingState) { mutable.value = mutable.value.block() }
@@ -120,7 +163,7 @@ class OnboardingViewModel : ViewModel() {
 
 @Composable fun OnboardingRoute(vm: OnboardingViewModel = viewModel()) {
     val state by vm.state.collectAsState()
-    OnboardingScreen(state, vm::url, vm::protocol, vm::provider, vm::username, vm::password, vm::toggle, vm::connect)
+    OnboardingScreen(state, vm::url, vm::protocol, vm::provider, vm::username, vm::password, vm::toggle, vm::rememberConnection, vm::connect)
 }
 
 @Composable private fun OnboardingScreen(
@@ -131,6 +174,7 @@ class OnboardingViewModel : ViewModel() {
     onUsername: (String) -> Unit,
     onPassword: (String) -> Unit,
     onToggle: () -> Unit,
+    onRememberConnection: (Boolean) -> Unit,
     onConnect: () -> Unit,
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -145,7 +189,7 @@ class OnboardingViewModel : ViewModel() {
                     Spacer(Modifier.height(8.dp))
                     Text("Official Desktop and hermes-webui are supported.", color = MaterialTheme.colorScheme.onSurface.copy(.6f))
                     Spacer(Modifier.height(24.dp))
-                    ConnectionCard(state, onUrl, onProtocol, onProvider, onUsername, onPassword, onToggle, onConnect)
+                    ConnectionCard(state, onUrl, onProtocol, onProvider, onUsername, onPassword, onToggle, onRememberConnection, onConnect)
                     Spacer(Modifier.height(18.dp))
                     Text("Credentials stay on this device. HTTPS is required except for localhost and Tailscale.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(.5f), lineHeight = 18.sp)
                 }
@@ -154,7 +198,7 @@ class OnboardingViewModel : ViewModel() {
     }
 }
 
-@Composable private fun ConnectionCard(state: OnboardingState, onUrl:(String)->Unit, onProtocol:(ServerProtocol)->Unit, onProvider:(String)->Unit, onUsername:(String)->Unit, onPassword:(String)->Unit, onToggle:()->Unit, onConnect:()->Unit) {
+@Composable private fun ConnectionCard(state: OnboardingState, onUrl:(String)->Unit, onProtocol:(ServerProtocol)->Unit, onProvider:(String)->Unit, onUsername:(String)->Unit, onPassword:(String)->Unit, onToggle:()->Unit, onRememberConnection:(Boolean)->Unit, onConnect:()->Unit) {
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(20.dp)) {
             OutlinedTextField(state.url, onUrl, Modifier.fillMaxWidth(), label = { Text("Server URL") }, placeholder = { Text("https://hermes.example.com") }, singleLine = true, enabled = !state.loading)
@@ -172,6 +216,10 @@ class OnboardingViewModel : ViewModel() {
             if (state.needsPassword || state.password.isNotEmpty()) {
                 Spacer(Modifier.height(14.dp))
                 OutlinedTextField(state.password, onPassword, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = if (state.showPassword) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { TextButton(onClick = onToggle) { Text(if (state.showPassword) "Hide" else "Show") } }, enabled = !state.loading)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = state.rememberConnection, onCheckedChange = onRememberConnection, enabled = !state.loading)
+                Text("Remember this server securely", style = MaterialTheme.typography.bodyMedium)
             }
             state.error?.let { Spacer(Modifier.height(12.dp)); Text(it, color = MaterialTheme.colorScheme.error) }
             Spacer(Modifier.height(20.dp))
