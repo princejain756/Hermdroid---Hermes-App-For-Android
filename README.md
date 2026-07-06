@@ -1,61 +1,41 @@
 <p align="center">
-  <img src="core/design/src/main/res/drawable/hermes_logo.jpg" width="128" alt="Hermroid logo">
+  <img src="core/design/src/main/res/drawable/hermes_logo.jpg" width="132" alt="Hermroid logo">
 </p>
 
 <h1 align="center">Hermroid</h1>
 
 <p align="center">
-  A native Android client for connecting to a self-hosted Hermes agent.
+  A native Android control surface for your self-hosted Hermes agent.
 </p>
 
 <p align="center">
-  <img alt="Android API 26+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white">
-  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white">
+  <img alt="Android 8+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white">
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white">
   <img alt="Jetpack Compose" src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white">
-  <img alt="Project status" src="https://img.shields.io/badge/status-early%20alpha-F5A623">
+  <img alt="Status" src="https://img.shields.io/badge/status-developer%20preview-C58B12">
 </p>
 
-Hermroid brings Hermes to Android with a touch-first interface built for phones and tablets. It connects directly to infrastructure you control and supports both the official Hermes Desktop server protocol and `hermes-webui`.
+Hermroid brings Hermes sessions, streaming responses, models, and approved Android actions into one touch-first app for phones and tablets. It connects directly to infrastructure you control—there is no Hermroid cloud or proxy.
 
-> [!IMPORTANT]
-> Hermroid is an early alpha. The current build implements server discovery, authentication, and connection onboarding. Chat, model switching, sessions, and Android device actions remain under development.
+## What works
 
-## Current capabilities
+- Streaming chat with live reasoning and tool activity
+- Session history, new chats, resume, and interruption
+- In-composer model switcher grouped by provider
+- Official Hermes Desktop and `hermes-webui` connections
+- Password authentication and encrypted on-device connection storage
+- Approval and clarification dialogs during agent runs
+- Voice input and copyable fenced code blocks
+- Phone and tablet layouts with a permanent session pane on larger screens
+- Optional Hermroid home screen with app search and adjustable grid columns
+- Approved Android actions: open apps, back/home/recents, notifications, tap labelled controls, and enter text
+- WhatsApp message preparation through an official Android intent
+- Multi-file ZIP creation and Android share sheet
+- Trusted mode for users who explicitly choose to skip local action confirmations
 
-- Native Kotlin and Jetpack Compose application
-- Adaptive onboarding layout for phones and tablets
-- Automatic detection of official Hermes Desktop and `hermes-webui`
-- Manual protocol selection when server detection is ambiguous
-- Password authentication for supported Hermes Desktop providers
-- Password authentication for `hermes-webui`
-- JSON-RPC WebSocket connection to the official Desktop backend
-- HTTPS enforcement for public servers, with cleartext exceptions for local development and Tailscale
-- Unit tests for protocol detection, authentication, and server models
+## Install a development build
 
-## Planned capabilities
-
-- Streaming chat with Markdown, code blocks, and tool activity
-- In-chat model and reasoning selection
-- Session, project, profile, task, skill, and memory management
-- File selection, compression, and sharing
-- Android app launching and intent-based actions
-- Optional accessibility-driven device actions with explicit permission and confirmation controls
-- Encrypted on-device storage for server credentials
-
-The roadmap describes intended work, not shipped functionality. Android security boundaries will prevent Hermroid from silently changing protected system or application files on non-rooted devices.
-
-## Requirements
-
-- Android 8.0 (API 26) or newer
-- A reachable official Hermes Desktop server or `hermes-webui` instance
-- Java 17 for local builds
-- Android SDK 35
-
-The desktop application’s private `127.0.0.1` server cannot be reached from a phone. Bind an authenticated Hermes server to a network interface you trust, or expose it through a private network such as Tailscale.
-
-## Build from source
-
-Clone the repository and build the debug APK:
+Hermroid currently ships from source. Clone the repository and build the debug APK:
 
 ```bash
 git clone https://github.com/princejain756/Hermdroid---Hermes-App-For-Android.git
@@ -63,49 +43,81 @@ cd Hermdroid---Hermes-App-For-Android
 ./gradlew assembleDebug
 ```
 
-The APK will be written to:
+Install `app/build/outputs/apk/debug/app-debug.apk`, or open the project in Android Studio and run the `app` configuration.
+
+Requirements:
+
+- Android 8.0 (API 26) or newer
+- A reachable Hermes Desktop or `hermes-webui` server
+- Java 17 and Android SDK 35 when building locally
+
+## Connect
+
+1. Make the Hermes server reachable from your phone through HTTPS or a private Tailscale address.
+2. Open Hermroid and enter the complete server URL, including its port.
+3. Keep protocol detection on **Auto**, or choose **Official Desktop** / **hermes-webui** manually.
+4. Enter the server credentials and connect.
+5. Choose a session or start a new conversation.
+
+The Desktop app's private `127.0.0.1` endpoint is only reachable from the computer itself. A phone needs an authenticated network endpoint; do not expose an unauthenticated Hermes server to the public internet.
+
+## Android control
+
+Hermroid follows Android's security model. Enable **Hermroid device control** in Android Accessibility settings only if you want screen actions. Every local action asks for confirmation by default.
+
+Examples understood directly by the Android client:
 
 ```text
-app/build/outputs/apk/debug/app-debug.apk
+open WhatsApp
+go back
+tap Send
+type hello from Hermroid
+message +14155550123 on WhatsApp saying I am on my way
+compress files
+set the home screen to 5 columns
 ```
 
-You can also open the repository in Android Studio and run the `app` configuration on a device or emulator.
+WhatsApp messages are prepared in WhatsApp for review. Hermroid does not silently send external messages in normal mode.
 
-## Connect to Hermes
+## Security boundaries
 
-1. Start a Hermes server that your Android device can reach.
-2. Open Hermroid and enter the server URL, including its port when required.
-3. Leave the protocol set to **Auto**, or select the server type manually.
-4. Enter credentials when the server requests them.
-5. Tap **Detect and connect**.
+On a non-rooted phone, Hermroid can operate visible UI through Android Accessibility, launch supported intents, and work with files the user selects. It cannot silently read another app's private data, alter protected system files, bypass lock-screen security, or grant itself permissions.
 
-Use HTTPS for any server exposed beyond localhost or a private Tailscale address.
-
-## Project structure
-
-```text
-app/                 Android application entry point
-core/design/         Theme and shared visual assets
-core/model/          Server addresses and protocol models
-core/network/        Detection, REST authentication, and WebSocket transport
-core/security/       Credential storage contract
-feature/onboarding/  Adaptive connection and sign-in interface
-```
+Trusted mode removes Hermroid's local confirmation dialog; it does not bypass Android or server-side approval controls. Use it only on a device and server you trust.
 
 ## Development
 
-Run unit tests, Android lint, and a debug build before opening a pull request:
+Run the complete local verification suite:
 
 ```bash
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-The application uses a modular Gradle layout with Kotlin 2.0, Jetpack Compose, Material 3, OkHttp, Moshi, coroutines, Hilt, and AndroidX.
+Project layout:
+
+```text
+app/                  Application entry point
+core/automation/      Accessibility, intents, and ZIP operations
+core/design/          Theme and visual assets
+core/model/           Chat, session, model, and server models
+core/network/         Desktop JSON-RPC and WebUI REST/SSE clients
+core/security/        Android encrypted credential storage
+feature/chat/         Adaptive chat, sessions, models, and approvals
+feature/launcher/     Optional Android home screen
+feature/onboarding/   Detection, authentication, and connection setup
+```
+
+## Current limitations
+
+- Passkey-only server login is not implemented.
+- Hermes tools run on the connected server; Android actions currently use Hermroid's local command grammar rather than a remotely registered mobile-tool protocol.
+- Physical-device compatibility still needs broader testing across Android vendors.
+- A signed public release and Play Store distribution are not available yet.
 
 ## Contributing
 
-Issues and focused pull requests are welcome. Please describe the server type and Android version when reporting connection problems. Do not include passwords, cookies, server tokens, or private URLs in logs or screenshots.
+Issues and focused pull requests are welcome. Include the Android version, device vendor, server type, and sanitized error details. Never post passwords, session cookies, private server URLs, or API keys.
 
-## Project status
+Hermroid is an independent community project and is not an official Hermes or Nous Research application. Names and trademarks belong to their respective owners.
 
-Hermroid is an independent community project. It is not an official Hermes or Nous Research application. Names and trademarks belong to their respective owners.
+_README last reviewed: 2026-07-06._
