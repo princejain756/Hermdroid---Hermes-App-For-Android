@@ -18,7 +18,7 @@ class DesktopJsonRpcClientTest {
     private lateinit var server: MockWebServer
 
     @Before fun setUp() { server = MockWebServer().also { it.start() } }
-    @After fun tearDown() { server.shutdown() }
+    @After fun tearDown() { runCatching { server.shutdown() } }
 
     @Test fun `connect returns after gateway ready`() = runBlocking {
         server.enqueue(
