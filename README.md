@@ -90,7 +90,7 @@ Trusted mode removes Hermroid's local confirmation dialog; it does not bypass An
 Run the complete local verification suite:
 
 ```bash
-./gradlew testDebugUnitTest lintDebug assembleDebug
+./gradlew testDebugUnitTest lintDebug assembleDebug assembleRelease
 ```
 
 Project layout:
