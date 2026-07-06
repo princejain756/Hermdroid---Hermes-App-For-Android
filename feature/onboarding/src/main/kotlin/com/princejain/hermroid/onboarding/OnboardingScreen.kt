@@ -111,6 +111,7 @@ class OnboardingViewModel : ViewModel() {
             }
             require(api.login(mutable.value.password).ok == true) { "Incorrect password" }
         }
+        DefaultHermesConnectionManager.attachWebUi(address, api.chatApi())
         update { copy(loading = false, connected = true, needsPassword = false, password = "") }
     }
 
@@ -140,15 +141,13 @@ class OnboardingViewModel : ViewModel() {
                 Column(Modifier.widthIn(max = 520.dp).fillMaxWidth().verticalScroll(rememberScrollState()).align(Alignment.CenterVertically).padding(vertical = 32.dp)) {
                     if (!wide) Row(verticalAlignment = Alignment.CenterVertically) { HermesPortrait(66.dp); Spacer(Modifier.width(14.dp)); Wordmark() }
                     Spacer(Modifier.height(if (wide) 0.dp else 38.dp))
-                    if (state.connected) Connected(state.url, state.detectedProtocol) else {
-                        Text("Connect to Hermes", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Official Desktop and hermes-webui are supported.", color = MaterialTheme.colorScheme.onSurface.copy(.6f))
-                        Spacer(Modifier.height(24.dp))
-                        ConnectionCard(state, onUrl, onProtocol, onProvider, onUsername, onPassword, onToggle, onConnect)
-                        Spacer(Modifier.height(18.dp))
-                        Text("Credentials stay on this device. HTTPS is required except for localhost and Tailscale.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(.5f), lineHeight = 18.sp)
-                    }
+                    Text("Connect to Hermes", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Official Desktop and hermes-webui are supported.", color = MaterialTheme.colorScheme.onSurface.copy(.6f))
+                    Spacer(Modifier.height(24.dp))
+                    ConnectionCard(state, onUrl, onProtocol, onProvider, onUsername, onPassword, onToggle, onConnect)
+                    Spacer(Modifier.height(18.dp))
+                    Text("Credentials stay on this device. HTTPS is required except for localhost and Tailscale.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(.5f), lineHeight = 18.sp)
                 }
             }
         }
@@ -184,4 +183,3 @@ class OnboardingViewModel : ViewModel() {
 @Composable private fun Hero(modifier:Modifier){ Column(modifier){ HermesPortrait(156.dp); Spacer(Modifier.height(22.dp)); Wordmark(); Spacer(Modifier.height(24.dp)); Text("Your Hermes agent, wherever you are.",fontSize=35.sp,lineHeight=39.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.height(14.dp)); Text("Private by design. Hermroid talks directly to the server you control.",color=MaterialTheme.colorScheme.onSurface.copy(.62f),fontSize=17.sp,lineHeight=25.sp) } }
 @Composable private fun Wordmark(){ Row(verticalAlignment=Alignment.CenterVertically){ Surface(shape=RoundedCornerShape(9.dp),color=MaterialTheme.colorScheme.secondary){ Text("H",Modifier.padding(horizontal=9.dp,vertical=5.dp),fontWeight=FontWeight.Black,color=MaterialTheme.colorScheme.onPrimary) }; Spacer(Modifier.width(9.dp)); Text("HERMROID",fontSize=18.sp,fontWeight=FontWeight.Black,letterSpacing=1.2.sp) } }
 @Composable private fun HermesPortrait(size: androidx.compose.ui.unit.Dp){ Image(painterResource(DesignR.drawable.hermes_logo),contentDescription="Hermroid assistant portrait",contentScale=ContentScale.Crop,modifier=Modifier.size(size).clip(CircleShape).border(1.dp,MaterialTheme.colorScheme.outline.copy(.25f),CircleShape)) }
-@Composable private fun Connected(url:String,protocol:ServerProtocol?){ Wordmark(); Spacer(Modifier.height(38.dp)); Text("Connected",fontSize=32.sp,fontWeight=FontWeight.Bold); Spacer(Modifier.height(10.dp)); Text(url,color=MaterialTheme.colorScheme.onSurface.copy(.6f)); protocol?.let{Spacer(Modifier.height(10.dp));SuggestionChip(onClick={},label={Text(it.label)})}; Spacer(Modifier.height(24.dp)); Card(shape=RoundedCornerShape(18.dp)){ Text("Server connection verified. Sessions and streaming chat are the next development milestone.",Modifier.padding(20.dp),lineHeight=22.sp) } }

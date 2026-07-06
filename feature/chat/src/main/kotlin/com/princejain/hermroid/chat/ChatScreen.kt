@@ -40,13 +40,13 @@ import com.princejain.hermroid.automation.FileCompressor
 import com.princejain.hermroid.model.ChatMessage
 import com.princejain.hermroid.model.ChatRole
 import com.princejain.hermroid.model.HermesSession
-import com.princejain.hermroid.network.DesktopHermesApi
+import com.princejain.hermroid.network.HermesChatApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ChatRoute(api: DesktopHermesApi, onDisconnect: () -> Unit) {
+fun ChatRoute(api: HermesChatApi, onDisconnect: () -> Unit) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("hermroid_settings", Context.MODE_PRIVATE) }
     var trustedMode by remember { mutableStateOf(preferences.getBoolean("trusted_mode", false)) }

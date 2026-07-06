@@ -13,6 +13,7 @@ data class ApprovalRequest(
     val command: String,
     val description: String,
     val allowPermanent: Boolean,
+    val requestId: String? = null,
 )
 
 data class ClarificationRequest(

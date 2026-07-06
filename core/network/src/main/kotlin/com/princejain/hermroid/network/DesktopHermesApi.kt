@@ -11,10 +11,10 @@ data class SessionSnapshot(
     val running: Boolean,
 )
 
-class DesktopHermesApi(private val rpc: JsonRpcTransport) {
-    val events = rpc.events
+class DesktopHermesApi(private val rpc: JsonRpcTransport) : HermesChatApi {
+    override val events = rpc.events
 
-    suspend fun listSessions(): List<HermesSession> {
+    override suspend fun listSessions(): List<HermesSession> {
         val result = rpc.request("session.list").objectValue()
         return result.list("sessions").mapNotNull { value ->
             val item = value as? Map<*, *> ?: return@mapNotNull null
@@ -29,12 +29,12 @@ class DesktopHermesApi(private val rpc: JsonRpcTransport) {
         }
     }
 
-    suspend fun createSession(columns: Int = 80): String {
+    override suspend fun createSession(columns: Int): String {
         val result = rpc.request("session.create", mapOf("cols" to columns)).objectValue()
         return result.string("session_id") ?: throw ApiException("Desktop did not return a session id")
     }
 
-    suspend fun resumeSession(sessionId: String, columns: Int = 80): SessionSnapshot {
+    override suspend fun resumeSession(sessionId: String, columns: Int): SessionSnapshot {
         val result = rpc.request(
             "session.resume",
             mapOf("session_id" to sessionId, "cols" to columns),
@@ -55,7 +55,7 @@ class DesktopHermesApi(private val rpc: JsonRpcTransport) {
         )
     }
 
-    suspend fun models(sessionId: String): List<HermesModel> {
+    override suspend fun models(sessionId: String): List<HermesModel> {
         val result = rpc.request("model.options", mapOf("session_id" to sessionId)).objectValue()
         val current = result.string("model")
         return result.list("providers").flatMap { value ->
@@ -73,7 +73,7 @@ class DesktopHermesApi(private val rpc: JsonRpcTransport) {
         }
     }
 
-    suspend fun selectModel(sessionId: String, modelId: String): String {
+    override suspend fun selectModel(sessionId: String, modelId: String): String {
         val result = rpc.request(
             "config.set",
             mapOf("key" to "model", "session_id" to sessionId, "value" to modelId),
@@ -81,23 +81,23 @@ class DesktopHermesApi(private val rpc: JsonRpcTransport) {
         return result.string("value") ?: throw ApiException("Desktop rejected the model change")
     }
 
-    suspend fun submit(sessionId: String, text: String): Boolean =
+    override suspend fun submit(sessionId: String, text: String): Boolean =
         rpc.request("prompt.submit", mapOf("session_id" to sessionId, "text" to text))
             .objectValue()["ok"] as? Boolean ?: false
 
-    suspend fun interrupt(sessionId: String): Boolean =
+    override suspend fun interrupt(sessionId: String): Boolean =
         rpc.request("session.interrupt", mapOf("session_id" to sessionId))
             .objectValue()["ok"] as? Boolean ?: false
 
-    suspend fun respondToApproval(sessionId: String, choice: String): Boolean =
+    override suspend fun respondToApproval(sessionId: String, choice: String, requestId: String?): Boolean =
         rpc.request("approval.respond", mapOf("choice" to choice, "session_id" to sessionId))
             .objectValue()["ok"] as? Boolean ?: false
 
-    suspend fun respondToClarification(requestId: String, answer: String): Boolean =
+    override suspend fun respondToClarification(sessionId: String, requestId: String, answer: String): Boolean =
         rpc.request("clarify.respond", mapOf("answer" to answer, "request_id" to requestId))
             .objectValue()["ok"] as? Boolean ?: false
 
-    fun disconnect() = rpc.disconnect()
+    override fun disconnect() = rpc.disconnect()
 }
 
 @Suppress("UNCHECKED_CAST")

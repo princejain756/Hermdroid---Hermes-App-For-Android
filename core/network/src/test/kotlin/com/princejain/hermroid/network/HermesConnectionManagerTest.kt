@@ -3,7 +3,6 @@ package com.princejain.hermroid.network
 import com.princejain.hermroid.model.ServerAddress
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -16,9 +15,9 @@ class HermesConnectionManagerTest {
 
         manager.attachDesktop(address, transport)
 
-        val connected = manager.state.value as HermesConnectionState.ConnectedDesktop
+        val connected = manager.state.value as HermesConnectionState.Connected
         assertEquals(address, connected.address)
-        assertSame(transport, connected.transport)
+        assertTrue(connected.api is DesktopHermesApi)
 
         manager.disconnect()
 

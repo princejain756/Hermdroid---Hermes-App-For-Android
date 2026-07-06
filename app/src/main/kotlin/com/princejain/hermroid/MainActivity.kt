@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
             HermroidTheme {
                 val connection by DefaultHermesConnectionManager.state.collectAsState()
                 when (val current = connection) {
-                    is HermesConnectionState.ConnectedDesktop -> ChatRoute(
+                    is HermesConnectionState.Connected -> ChatRoute(
                         api = current.api,
                         onDisconnect = DefaultHermesConnectionManager::disconnect,
                     )

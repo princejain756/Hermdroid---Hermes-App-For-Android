@@ -103,7 +103,7 @@ class DesktopHermesApiTest {
         val api = DesktopHermesApi(rpc)
 
         assertTrue(api.respondToApproval("sid-1", "once"))
-        assertTrue(api.respondToClarification("request-1", "Android"))
+        assertTrue(api.respondToClarification("sid-1", "request-1", "Android"))
         assertEquals(
             listOf(
                 Call("approval.respond", mapOf("choice" to "once", "session_id" to "sid-1")),

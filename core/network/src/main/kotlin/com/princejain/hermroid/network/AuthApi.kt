@@ -27,6 +27,7 @@ class AuthApi(private val address: ServerAddress) {
     suspend fun health(): Health = get("health")
     suspend fun authStatus(): AuthStatus = get("api/auth/status")
     suspend fun login(password: String): LoginResult = post("api/auth/login", moshi.adapter(LoginBody::class.java).toJson(LoginBody(password)))
+    fun chatApi(): WebUiHermesApi = WebUiHermesApi(address, client)
 
     private suspend inline fun <reified T> get(path: String): T = execute(path, null)
     private suspend inline fun <reified T> post(path: String, json: String): T = execute(path, json)

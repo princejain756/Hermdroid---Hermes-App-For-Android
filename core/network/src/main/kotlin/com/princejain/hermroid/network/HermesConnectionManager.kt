@@ -6,10 +6,9 @@ import kotlinx.coroutines.flow.asStateFlow
 
 sealed interface HermesConnectionState {
     data object Disconnected : HermesConnectionState
-    data class ConnectedDesktop(
+    data class Connected(
         val address: ServerAddress,
-        val transport: JsonRpcTransport,
-        val api: DesktopHermesApi = DesktopHermesApi(transport),
+        val api: HermesChatApi,
     ) : HermesConnectionState
 }
 
@@ -19,11 +18,16 @@ class HermesConnectionManager {
 
     fun attachDesktop(address: ServerAddress, transport: JsonRpcTransport) {
         disconnect()
-        mutableState.value = HermesConnectionState.ConnectedDesktop(address, transport)
+        mutableState.value = HermesConnectionState.Connected(address, DesktopHermesApi(transport))
+    }
+
+    fun attachWebUi(address: ServerAddress, api: WebUiHermesApi) {
+        disconnect()
+        mutableState.value = HermesConnectionState.Connected(address, api)
     }
 
     fun disconnect() {
-        (mutableState.value as? HermesConnectionState.ConnectedDesktop)?.transport?.disconnect()
+        (mutableState.value as? HermesConnectionState.Connected)?.api?.disconnect()
         mutableState.value = HermesConnectionState.Disconnected
     }
 }

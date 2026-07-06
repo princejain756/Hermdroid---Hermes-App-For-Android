@@ -8,14 +8,14 @@ import com.princejain.hermroid.automation.ActionResult
 import com.princejain.hermroid.automation.AndroidAction
 import com.princejain.hermroid.automation.AndroidCommandParser
 import com.princejain.hermroid.network.DesktopChatReducer
-import com.princejain.hermroid.network.DesktopHermesApi
+import com.princejain.hermroid.network.HermesChatApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicLong
 
 class ChatViewModel(
-    private val api: DesktopHermesApi,
+    private val api: HermesChatApi,
     private val executeAndroidAction: (AndroidAction) -> ActionResult,
     private val trustedMode: () -> Boolean,
 ) : ViewModel() {
@@ -32,6 +32,7 @@ class ChatViewModel(
                     "approval.request" -> dispatch(
                         ChatAction.ApprovalRequested(
                             ApprovalRequest(
+                                requestId = event.payload["approval_id"] as? String,
                                 command = event.payload["command"] as? String ?: "",
                                 description = event.payload["description"] as? String ?: "Dangerous command",
                                 allowPermanent = event.payload["allow_permanent"] as? Boolean ?: true,
@@ -41,9 +42,13 @@ class ChatViewModel(
                     "clarify.request" -> dispatch(
                         ChatAction.ClarificationRequested(
                             ClarificationRequest(
-                                requestId = event.payload["request_id"] as? String ?: return@collect,
+                                requestId = event.payload["request_id"] as? String
+                                    ?: event.payload["clarify_id"] as? String
+                                    ?: return@collect,
                                 question = event.payload["question"] as? String ?: "Hermes needs more information",
-                                choices = (event.payload["choices"] as? List<*>)?.mapNotNull { it as? String }.orEmpty(),
+                                choices = ((event.payload["choices"] ?: event.payload["choices_offered"]) as? List<*>)
+                                    ?.mapNotNull { it as? String }
+                                    .orEmpty(),
                             ),
                         ),
                     )
@@ -116,15 +121,16 @@ class ChatViewModel(
     fun answerApproval(choice: String) {
         val sessionId = mutableState.value.currentSessionId ?: return
         launchAction {
-            check(api.respondToApproval(sessionId, choice)) { "Hermes did not accept the approval response" }
+            check(api.respondToApproval(sessionId, choice, mutableState.value.approval?.requestId)) { "Hermes did not accept the approval response" }
             dispatch(ChatAction.RequestAnswered)
         }
     }
 
     fun answerClarification(answer: String) {
         val requestId = mutableState.value.clarification?.requestId ?: return
+        val sessionId = mutableState.value.currentSessionId ?: return
         launchAction {
-            check(api.respondToClarification(requestId, answer)) { "Hermes did not accept the answer" }
+            check(api.respondToClarification(sessionId, requestId, answer)) { "Hermes did not accept the answer" }
             dispatch(ChatAction.RequestAnswered)
         }
     }
@@ -159,7 +165,7 @@ class ChatViewModel(
 
     companion object {
         fun factory(
-            api: DesktopHermesApi,
+            api: HermesChatApi,
             executeAndroidAction: (AndroidAction) -> ActionResult,
             trustedMode: () -> Boolean,
         ) = object : ViewModelProvider.Factory {
